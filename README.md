@@ -5,6 +5,10 @@ Live site: _pending successful Render deployment_
 A simple marketplace where people can list used items, browse, search by keyword and category, and mark items as sold.
 
 ## Features
+- Redesigned dark interface with amber accents, plus a light theme
+- Category chips, price sorting, and saved favourites stored on your device
+- Rupee pricing and responsive desktop/mobile layouts
+- Integrated MarketMate chat panel with live listing search and budget matching
 - Browse listings, search, and filter by category
 - View item details with contact info
 - Post a new item with validation
@@ -41,3 +45,9 @@ Note: the free Render disk is ephemeral, so `items.json` resets on redeploy or r
 Add user accounts with an owner token so only the seller can mark an item as sold or delete it, and move storage to a database such as MongoDB Atlas (free M0 tier) so data survives redeploys.
 
 This demonstration has no authentication: anyone can mark a listing sold, and contact details are public. Do not post confidential information.
+
+## Integrated chatbot
+MarketMate uses `POST /api/chat` and built-in intent rules. It searches real, unsold listings, supports requests such as `books under 500`, opens listing details, and explains listing, contact, sold status, and safe buying. It is **not generative AI** and needs no API keys or additional environment variables. Unsupported requests receive guidance rather than fabricated listings. Messages are not stored. Category illustrations are decorative, not seller-uploaded photographs.
+
+## Verification of the redesign
+Local checks cover health, listing creation and validation, search and categories, sold-item removal, malformed JSON, desktop and 375px browser flows, saved favourites, theme switching, and chatbot lookup/budget/selling guidance. Live deployment verification is pending confirmation of the Render URL.
