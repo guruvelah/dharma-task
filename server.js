@@ -11,17 +11,20 @@ const CATEGORIES = ['Electronics', 'Furniture', 'Vehicles', 'Clothing', 'Books',
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Initialize only missing storage; never silently discard unreadable data.
+fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, '[]');
+
 function loadItems() {
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  } catch {
-    return [];
-  }
+  const items = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  if (!Array.isArray(items)) throw new Error('Invalid item storage');
+  return items;
 }
 
 function saveItems(items) {
-  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-  fs.writeFileSync(DATA_FILE, JSON.stringify(items, null, 2));
+  const temporary = DATA_FILE + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(items, null, 2));
+  fs.renameSync(temporary, DATA_FILE);
 }
 
 function clean(value, max) {
@@ -59,7 +62,17 @@ app.get('/api/items/:id', (req, res) => {
 
 app.post('/api/items', (req, res) => {
   const b = req.body || {};
-  const price = Number(b.price);
+  for (const [field, max, required] of [
+    ['title', 80, true], ['description', 1000, false],
+    ['location', 80, false], ['contact', 80, true],
+  ]) {
+    const value = b[field];
+    if ((required && (typeof value !== 'string' || !value.trim())) ||
+        (value !== undefined && (typeof value !== 'string' || value.length > max))) {
+      return res.status(400).json({ error: `${field} must be ${required ? 'nonempty text' : 'text'} of at most ${max} characters.` });
+    }
+  }
+  const price = b.price;
 
   const item = {
     id: crypto.randomUUID(),
@@ -100,6 +113,12 @@ app.post('/api/items/:id/sold', (req, res) => {
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found.' });
+});
+
+app.use((err, req, res, next) => {
+  const status = err.type === 'entity.too.large' ? 413 : err.type === 'entity.parse.failed' ? 400 : 500;
+  if (status === 500) console.error('Request failed:', err.message);
+  res.status(status).json({ error: status === 413 ? 'Request is too large.' : status === 400 ? 'Invalid JSON body.' : 'Could not access item storage.' });
 });
 
 app.listen(PORT, () => {

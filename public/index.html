@@ -16,6 +16,9 @@
     .toolbar input, .toolbar select { flex: 1 1 160px; padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
     .card { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); cursor: pointer; }
+    .card, .detail { overflow-wrap: anywhere; min-width: 0; }
+    .card { text-align: left; color: #222; font: inherit; }
+    :focus-visible { outline: 3px solid #f59e0b; outline-offset: 3px; }
     .card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.15); }
     .price { color: #0f766e; font-weight: 700; font-size: 1.1rem; }
     .meta { color: #666; font-size: 0.85rem; margin-top: 4px; }
@@ -45,11 +48,12 @@
   </header>
 
   <main>
+    <div id="pageError" class="error" role="alert"></div>
     <!-- Browse view -->
     <section id="browseView">
       <div class="toolbar">
-        <input id="search" type="search" placeholder="Search items...">
-        <select id="categoryFilter"><option value="">All categories</option></select>
+        <input id="search" aria-label="Search items" type="search" placeholder="Search items...">
+        <select id="categoryFilter" aria-label="Filter by category"><option value="">All categories</option></select>
       </div>
       <div id="grid" class="grid"></div>
       <div id="emptyMsg" class="empty hidden">No items found.</div>
@@ -64,15 +68,15 @@
     <section id="sellView" class="hidden">
       <form id="sellForm">
         <h2 style="margin:0">List an item</h2>
-        <input name="title" placeholder="Title (e.g. Used bicycle)" maxlength="80" required>
-        <input name="price" type="number" min="0" step="0.01" placeholder="Price" required>
-        <select name="category" id="categorySelect"></select>
-        <textarea name="description" rows="4" placeholder="Describe condition, age, etc." maxlength="1000"></textarea>
-        <input name="location" placeholder="Location (city / area)" maxlength="80">
-        <input name="contact" placeholder="Contact (phone or email)" maxlength="80" required>
-        <div id="formError" class="error"></div>
+        <input aria-label="Title" name="title" placeholder="Title (e.g. Used bicycle)" maxlength="80" required>
+        <input aria-label="Price" name="price" type="number" min="0" step="0.01" placeholder="Price" required>
+        <select aria-label="Category" name="category" id="categorySelect"></select>
+        <textarea aria-label="Description" name="description" rows="4" placeholder="Describe condition, age, etc." maxlength="1000"></textarea>
+        <input aria-label="Location" name="location" placeholder="Location (city / area)" maxlength="80">
+        <input aria-label="Contact" name="contact" placeholder="Contact (phone or email)" maxlength="80" required>
+        <div id="formError" class="error" role="alert"></div>
         <button type="submit">Post item</button>
-        <div id="formNotice" class="notice hidden"></div>
+        <div id="formNotice" class="notice hidden" role="status"></div>
       </form>
     </section>
   </main>
@@ -90,8 +94,16 @@
       );
     }
 
+    async function api(url, options) {
+      const res = await fetch(url, options);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Request failed.');
+      return body;
+    }
+    function report(error) { $('pageError').textContent = error.message || 'Connection failed. Please try again.'; }
+    let requestNumber = 0;
     async function loadCategories() {
-      const cats = await (await fetch('/api/categories')).json();
+      const cats = await api('/api/categories');
       const filter = $('categoryFilter');
       const select = $('categorySelect');
       cats.forEach((c) => {
@@ -105,21 +117,22 @@
         q: $('search').value.trim(),
         category: $('categoryFilter').value,
       });
-      const items = await (await fetch('/api/items?' + params)).json();
+      const current = ++requestNumber;
+      const items = await api('/api/items?' + params);
+      if (current !== requestNumber) return;
+      $('pageError').textContent = '';
       $('grid').innerHTML = items.map((i) => `
-        <div class="card" data-id="${esc(i.id)}">
+        <button type="button" class="card" data-id="${esc(i.id)}">
           <div class="price">${money(i.price)}</div>
           <strong>${esc(i.title)}</strong>
           <div class="meta">${esc(i.category)} · ${esc(i.location || 'No location')}</div>
           <p>${esc((i.description || '').slice(0, 100))}</p>
-        </div>`).join('');
+        </button>`).join('');
       $('emptyMsg').classList.toggle('hidden', items.length > 0);
     }
 
     async function showDetail(id) {
-      const res = await fetch('/api/items/' + encodeURIComponent(id));
-      if (!res.ok) return;
-      const i = await res.json();
+      const i = await api('/api/items/' + encodeURIComponent(id));
       $('detail').innerHTML = `
         <div class="price">${money(i.price)}</div>
         <h2 style="margin:6px 0">${esc(i.title)}</h2>
@@ -130,24 +143,25 @@
           <button class="secondary" id="backBtn">Back</button>
           <button id="soldBtn">Mark as sold</button>
         </div>`;
-      $('backBtn').onclick = () => { showView('browseView'); loadItems(); };
+      $('backBtn').onclick = () => { showView('browseView'); loadItems().catch(report); };
       $('soldBtn').onclick = async () => {
         if (!confirm('Mark this item as sold? It will be hidden from listings.')) return;
-        await fetch('/api/items/' + encodeURIComponent(id) + '/sold', { method: 'POST' });
+        try { await api('/api/items/' + encodeURIComponent(id) + '/sold', { method: 'POST' }); }
+        catch (error) { report(error); return; }
         showView('browseView');
-        loadItems();
+        loadItems().catch(report);
       };
       showView('detailView');
     }
 
     $('grid').addEventListener('click', (e) => {
       const card = e.target.closest('.card');
-      if (card) showDetail(card.dataset.id);
+      if (card) showDetail(card.dataset.id).catch(report);
     });
 
-    $('search').addEventListener('input', loadItems);
-    $('categoryFilter').addEventListener('change', loadItems);
-    $('navBrowse').onclick = () => { showView('browseView'); loadItems(); };
+    $('search').addEventListener('input', () => loadItems().catch(report));
+    $('categoryFilter').addEventListener('change', () => loadItems().catch(report));
+    $('navBrowse').onclick = () => { showView('browseView'); loadItems().catch(report); };
     $('navSell').onclick = () => { showView('sellView'); $('formNotice').classList.add('hidden'); };
 
     $('sellForm').addEventListener('submit', async (e) => {
@@ -155,22 +169,26 @@
       $('formError').textContent = '';
       const form = e.target;
       const data = Object.fromEntries(new FormData(form).entries());
-      const res = await fetch('/api/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        $('formError').textContent = body.error || 'Could not post item.';
+      data.price = Number(data.price);
+      const submit = form.querySelector('[type="submit"]');
+      submit.disabled = true;
+      $('formNotice').classList.add('hidden');
+      try {
+        await api('/api/items', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } catch (error) {
+        $('formError').textContent = error.message || 'Connection failed. Please try again.';
         return;
-      }
+      } finally { submit.disabled = false; }
+
       form.reset();
       $('formNotice').textContent = 'Your item is live!';
       $('formNotice').classList.remove('hidden');
     });
 
-    loadCategories().then(loadItems);
+    loadCategories().then(loadItems).catch(report);
   </script>
 </body>
 </html>
