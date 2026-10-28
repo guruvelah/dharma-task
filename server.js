@@ -72,12 +72,16 @@ app.post('/api/items', (req, res) => {
       return res.status(400).json({ error: `${field} must be ${required ? 'nonempty text' : 'text'} of at most ${max} characters.` });
     }
   }
+  if (b.image !== undefined && (typeof b.image !== 'string' || b.image.length > 70000 || (b.image && !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(b.image)))) {
+    return res.status(400).json({ error: 'Photo must be a JPEG thumbnail smaller than 70 KB.' });
+  }
   const price = b.price;
 
   const item = {
     id: crypto.randomUUID(),
     title: clean(b.title, 80),
     price,
+    image: b.image || '',
     category: CATEGORIES.includes(b.category) ? b.category : 'Other',
     description: clean(b.description, 1000),
     location: clean(b.location, 80),
@@ -111,34 +115,7 @@ app.post('/api/items/:id/sold', (req, res) => {
   res.json({ ok: true });
 });
 
-// A transparent, deterministic assistant: no external AI service or secret required.
-app.post('/api/chat', (req, res) => {
-  if (typeof req.body?.message !== 'string' || !req.body.message.trim() || req.body.message.length > 500) {
-    return res.status(400).json({ error: 'Enter a message between 1 and 500 characters.' });
-  }
-  const message = req.body.message.trim().toLowerCase();
-  const respond = (reply, items = [], action) => res.json({ reply, items, ...(action ? { action } : {}) });
-  if (/\b(sell|selling|list an item|create a listing|post an item)\b/.test(message)) {
-    return respond('Tap “Sell an item”, add a clear title, a price in rupees, category, condition, location and contact details. Then publish. Your contact is public, so share only what you are comfortable publishing.', [], 'sell');
-  }
-  if (/\b(safe|safety|scam|payment|paying|tips)\b/.test(message)) {
-    return respond('Meet in a busy public place, inspect and test the item before paying, and avoid advance payments to strangers. Never share OTPs or banking passwords. This marketplace does not process payments or verify sellers.');
-  }
-  if (/\b(sold|remove)\b/.test(message)) return respond('Open an item and choose “Mark as sold”, then confirm. It will disappear from browsing. This demo has no owner authentication, so anyone can mark an item sold.');
-  if (/\b(contact|seller|phone)\b/.test(message)) return respond('Open a listing to see the seller’s contact information. Contact them directly to discuss condition, price and pickup. I cannot message sellers or negotiate on your behalf.');
-  if (/^(hi|hello|hey|help)[!.? ]*$/.test(message)) return respond('Hi! I am a built-in marketplace helper, not generative AI. Try “books under 500”, “show electronics”, “show all items”, or “how do I sell?”. I search only actual available listings.');
-  const aliases = { Electronics: /\b(electronics?|phones?|laptops?|headphones?|computers?)\b/, Furniture: /\b(furniture|chairs?|desks?|sofas?|tables?)\b/, Vehicles: /\b(vehicles?|bikes?|bicycles?|cars?|scooters?)\b/, Clothing: /\b(clothing|clothes|shirts?|jackets?|dresses?|shoes?)\b/, Books: /\b(books?|novels?|textbooks?)\b/, Other: /\bother\b/ };
-  const category = CATEGORIES.find(c => aliases[c].test(message));
-  const budgetMatch = message.match(/(?:under|below|less than|up to|budget(?: of)?)\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)\s*(k)?\b/);
-  const budget = budgetMatch ? Number(budgetMatch[1].replace(/,/g, '')) * (budgetMatch[2] ? 1000 : 1) : null;
-  const stop = new Set(['show','find','me','all','items','item','available','listings','listing','please','want','need','looking','for','a','an','the','some','under','below','less','than','up','to','budget','of','rs','inr','in','my','buy','get','can','you','i','any']);
-  const query = message.replace(budgetMatch?.[0] || /$^/, '').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w && !stop.has(w) && !CATEGORIES.some(c => c.toLowerCase() === w));
-  let matches = loadItems().filter(i => !i.sold && (!category || i.category === category) && (budget === null || i.price <= budget));
-  if (query.length) matches = matches.filter(i => query.every(w => (i.title + ' ' + i.description + ' ' + i.category + ' ' + i.location).toLowerCase().includes(w)));
-  matches.sort((a,b) => budget !== null ? a.price-b.price : b.createdAt.localeCompare(a.createdAt));
-  if (!matches.length) return respond('I found no available listings matching that request. Try a category such as “electronics”, a different keyword, or “show all items”. I can also help you sell or explain safe buying.');
-  return respond(`I found ${matches.length} available ${matches.length === 1 ? 'item' : 'items'}${budget !== null ? ' within ₹' + budget.toLocaleString('en-IN') : ''}. ${matches.length > 5 ? 'Here are the first five.' : 'Tap one to view details and seller contact.'}`, matches.slice(0,5).map(({id,title,price,category})=>({id,title,price,category})));
-});
+require('./ai').installAI(app, loadItems);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found.' });
