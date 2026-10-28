@@ -33,7 +33,7 @@ async function generateReply({ message, history, inventory, apiKey, model, provi
   }
   const response = await fetchImpl(endpoint, request);
   if (!response.ok) {
-    const error = new Error(response.status === 429 ? 'The AI provider has reached its quota or rate limit. The owner should check API billing and limits.' : response.status === 401 || response.status === 403 ? 'The AI provider rejected the server credential. The owner should check the Render API key.' : 'The AI provider is unavailable. Please try again shortly.');
+    const error = new Error(response.status === 404 ? 'The configured AI model is unavailable for this project (provider HTTP 404). In Render set GEMINI_MODEL to gemini-3.5-flash-lite and redeploy.' : response.status === 400 ? 'The AI provider rejected the request (HTTP 400). Check that the API key and model are valid for this project.' : response.status === 429 ? 'The AI provider has reached its quota or rate limit. The owner should check API billing and limits.' : response.status === 401 || response.status === 403 ? 'The AI provider rejected the server credential. The owner should check the Render API key.' : 'The AI provider is unavailable (HTTP ' + response.status + '). Please try again shortly.');
     error.status = response.status === 429 ? 429 : 502;
     throw error;
   }
@@ -47,7 +47,7 @@ async function generateReply({ message, history, inventory, apiKey, model, provi
 }
 function aiConfig() {
   // Prefer Gemini when configured; never fail over to a paid provider after quota errors.
-  if (process.env.GEMINI_API_KEY) return { provider: 'Gemini', apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite' };
+  if (process.env.GEMINI_API_KEY) return { provider: 'Gemini', apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite' };
   return { provider: 'OpenAI', apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' };
 }
 function installAI(app, loadItems) {

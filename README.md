@@ -55,7 +55,7 @@ MarketMate supports Google Gemini (free-tier option) and OpenAI through server-s
 2. In Render → Environment → Add variable, set `GEMINI_API_KEY` to that key.
 3. Save and deploy the latest `main` commit. No OpenAI key is needed.
 
-Gemini takes priority when its key exists. The default model is `gemini-2.5-flash-lite`; `GEMINI_MODEL` is optional. Free usage has provider quotas and eligibility restrictions; keep the project on the free tier and do not enable billing to preserve the no-cost setup. There is no automatic paid fallback when quota runs out. Google may use free-tier inputs/outputs to improve its products; avoid sensitive content. Source: https://ai.google.dev/gemini-api/docs/pricing
+Gemini takes priority when its key exists. The default model is `gemini-3.5-flash-lite`; `GEMINI_MODEL` is optional. Free usage has provider quotas and eligibility restrictions; keep the project on the free tier and do not enable billing to preserve the no-cost setup. There is no automatic paid fallback when quota runs out. Google may use free-tier inputs/outputs to improve its products; avoid sensitive content. Source: https://ai.google.dev/gemini-api/docs/pricing
 
 ### Optional paid OpenAI setup in Render
 1. Open the `dharma-task-2` service → Environment.
@@ -72,3 +72,5 @@ The responsive workspace includes Explore, Saved, Create listing and AI assistan
 
 ## Verification
 Local API validation and mocked AI transport tests cover conversation history, structured response parsing, unknown item ID rejection, provider authentication/quota errors and missing-key handling. Mocked tests are not proof of a real provider response. The live model test is pending the owner's API credential and deployment. The previously deployed version passed health/create/read/search/filter/sold checks; the new version still requires live verification.
+
+Troubleshooting: the previous 2.5 default may be inaccessible to new Google projects. Use `GEMINI_MODEL=gemini-3.5-flash-lite` if overriding the default. Provider HTTP 400, 404, 429 and authentication failures now have distinct messages. Model availability remains subject to Google project access and quota.
